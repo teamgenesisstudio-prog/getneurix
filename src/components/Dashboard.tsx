@@ -4,7 +4,7 @@ import {
   TrendingUp, AlertTriangle, Target, Cpu, ArrowLeft,
   Settings, Lock, Users, Layers, Search, Database,
   FileText, Sparkles, GitBranch, Radio, Upload,
-  CheckCircle, XCircle, MessageSquare, Globe
+  CheckCircle, XCircle, MessageSquare, Globe, DollarSign, Rocket
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import RiskGauge from "@/components/RiskGauge";
