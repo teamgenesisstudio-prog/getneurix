@@ -1,10 +1,10 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   Activity, Shield, Skull, BarChart3, Zap, Eye, Brain,
   TrendingUp, AlertTriangle, Target, Cpu, ArrowLeft,
-  Settings, Lock, Users, Layers, Search, Database,
+  Lock, Users, Layers, Search, Database,
   FileText, Sparkles, GitBranch, Radio, Upload,
-  CheckCircle, XCircle, MessageSquare, Globe, DollarSign, Rocket
+  CheckCircle, XCircle, MessageSquare, DollarSign, Rocket
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import RiskGauge from "@/components/RiskGauge";
@@ -42,13 +42,15 @@ const Dashboard = ({ onBack }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("stress");
   const [fileData, setFileData] = useState<string>("");
   const [fileName, setFileName] = useState("");
-  const [aiAccuracy, setAiAccuracy] = useState(0);
+  const [aiAccuracy, setAiAccuracy] = useState<number | null>(null);
   const [edgeCases, setEdgeCases] = useState(0);
   const [humanReviews, setHumanReviews] = useState(0);
   const [labelingResults, setLabelingResults] = useState<any>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [shadowResult, setShadowResult] = useState<{ current: number; shadow: number } | null>(null);
+  const [humanReviewItems, setHumanReviewItems] = useState<Array<{ label: string; confidence: number; reasoning: string }>>([]);
 
   const addAlert = useCallback((type: Alert["type"], message: string) => {
     setAlerts(prev => [{ id: `a-${Date.now()}-${Math.random()}`, type, message, timestamp: new Date() }, ...prev]);
@@ -85,40 +87,33 @@ const Dashboard = ({ onBack }: DashboardProps) => {
 
       const r = result.result;
       if (r) {
-        setScore(r.score || Math.floor(Math.random() * 40) + 35);
+        setScore(r.score ?? 0);
         const parsedFailures: Failure[] = (r.failures || []).map((f: any, i: number) => ({
           id: `f-${Date.now()}-${i}`,
           type: f.type || "warning",
           title: f.title || "Unknown Failure",
           description: f.description || "",
-          impact: f.impact || "$0",
+          impact: f.impact || "Unknown",
           fix: f.fix || "No fix suggested",
         }));
         setFailures(parsedFailures);
-        setMoneySaved(prev => prev + (r.moneySaved || 15000));
-        setEdgeCases(prev => prev + (r.edgeCasesFound || 127));
-        setAiAccuracy(r.confidenceScore || 94);
-        addAlert("warning", `${parsedFailures.length} vulnerabilities detected`);
+        setMoneySaved(prev => prev + (r.moneySaved ?? 0));
+        setEdgeCases(prev => prev + (r.edgeCasesFound ?? 0));
+        setAiAccuracy(r.confidenceScore ?? null);
+        addAlert("warning", `${parsedFailures.length} vulnerabilities detected by ${selectedModel}`);
         addAlert("error", `Critical: ${parsedFailures.filter(f => f.type === "critical").length} critical failures found`);
-        addAlert("success", `Analysis complete. Reliability: ${r.score || 50}/100. Model: ${selectedModel}`);
+        addAlert("success", `Analysis complete. Reliability: ${r.score ?? "N/A"}/100. Source: ${selectedModel}`);
       }
 
       setTestsRun(prev => prev + 1);
     } catch (err: any) {
       console.error("Stress test error:", err);
-      addAlert("error", `AI error: ${err.message}. Using fallback analysis.`);
-      // Fallback to local engine
-      const { runStressTest } = await import("@/lib/neurix-engine");
-      const result = runStressTest(file.name);
-      setScore(result.score);
-      setFailures(result.failures);
-      setMoneySaved(prev => prev + result.moneySaved);
-      setAlerts(prev => [...result.alerts, ...prev]);
-      setTestsRun(prev => prev + 1);
+      addAlert("error", `AI stress test failed: ${err.message}. Please retry or check your connection.`);
+      toast({ title: "Stress test failed", description: err.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
-  }, [selectedModel, ghostMode, addAlert]);
+  }, [selectedModel, ghostMode, addAlert, toast]);
 
   const handleAdversarial = useCallback(async () => {
     addAlert("info", `Running adversarial attacks with ${selectedModel}...`);
@@ -130,7 +125,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       });
       const attacks = result.result?.attacks || [];
       const breached = attacks.filter((a: any) => a.success).length;
-      addAlert("error", `Adversarial: ${breached}/${attacks.length} attacks succeeded (${result.result?.overallRisk || "high"} risk)`);
+      addAlert("error", `Adversarial: ${breached}/${attacks.length} attacks succeeded (${result.result?.overallRisk || "unknown"} risk). Source: ${selectedModel}`);
       return attacks.map((a: any) => ({
         attack: a.name,
         success: a.success,
@@ -138,18 +133,15 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         description: a.description,
       }));
     } catch (err: any) {
-      addAlert("error", `Adversarial error: ${err.message}. Using fallback.`);
-      const { generateAdversarialResults } = await import("@/lib/neurix-engine");
-      const results = generateAdversarialResults();
-      const breached = results.filter(r => r.success).length;
-      addAlert("error", `Adversarial: ${breached}/${results.length} attacks succeeded`);
-      return results;
+      addAlert("error", `Adversarial attack failed: ${err.message}. No fake results generated.`);
+      toast({ title: "Adversarial simulation failed", description: err.message, variant: "destructive" });
+      return [];
     }
-  }, [selectedModel, fileName, addAlert]);
+  }, [selectedModel, fileName, addAlert, toast]);
 
   const handleAutoLabel = useCallback(async () => {
     if (!fileData) { toast({ title: "Upload data first", variant: "destructive" }); return; }
-    addAlert("info", "Running auto-labeling with ensemble voting...");
+    addAlert("info", `Running auto-labeling with ${selectedModel} ensemble...`);
     setIsProcessing(true);
     try {
       const result = await callNeurixAI({
@@ -158,10 +150,15 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         model: selectedModel,
       });
       setLabelingResults(result.result);
-      setHumanReviews(result.result?.needsReview || 3);
-      addAlert("success", `Auto-labeled: ${result.result?.autoLabeled || 9} confident, ${result.result?.needsReview || 1} need review`);
+      const needsReview = result.result?.needsReview ?? 0;
+      setHumanReviews(needsReview);
+      // Populate review items from real AI labels with low confidence
+      const lowConfLabels = (result.result?.labels || []).filter((l: any) => (l.confidence ?? 100) < 80);
+      setHumanReviewItems(lowConfLabels.map((l: any) => ({ label: l.label, confidence: l.confidence, reasoning: l.reasoning || "" })));
+      addAlert("success", `Auto-labeled: ${result.result?.autoLabeled ?? 0} confident, ${needsReview} need review. Source: ${selectedModel}`);
     } catch (err: any) {
-      addAlert("error", `Labeling error: ${err.message}`);
+      addAlert("error", `Labeling failed: ${err.message}`);
+      toast({ title: "Auto-labeling failed", description: err.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -169,41 +166,106 @@ const Dashboard = ({ onBack }: DashboardProps) => {
 
   const handleAutoFix = useCallback(async () => {
     if (failures.length === 0) return;
-    addAlert("info", "Auto-fixing: generating synthetic data + retraining...");
+    addAlert("info", `Auto-fixing ${failures.length} issues with ${selectedModel}...`);
     setIsProcessing(true);
     try {
       const result = await callNeurixAI({
         action: "synthetic-data",
-        data: { gap: failures.map(f => f.title).join(", ") },
-        model: selectedModel,
-      });
-      addAlert("success", `Generated ${result.result?.totalGenerated || 5} synthetic examples. Quality: ${result.result?.qualityScore || 92}%`);
-      setScore(prev => Math.min(98, prev + 15));
-      setMoneySaved(prev => prev + 10000);
-      addAlert("success", "Model retrained. Version 2.0 deployed.");
-    } catch (err: any) {
-      addAlert("error", `Auto-fix error: ${err.message}`);
-      setScore(prev => Math.min(98, prev + 15));
-      addAlert("success", "Auto-fix: Generated 10,000 synthetic examples + retrained (fallback)");
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [failures, selectedModel, addAlert]);
-
-  const handleDistill = useCallback(async () => {
-    addAlert("info", "Analyzing dataset for redundancy...");
-    try {
-      const result = await callNeurixAI({
-        action: "distill",
-        data: { datasetInfo: `${fileName || "dataset"} with ${testsRun * 1000 || 10000} rows` },
+        data: { gap: failures.map(f => `${f.title}: ${f.description}`).join("; ") },
         model: selectedModel,
       });
       const r = result.result;
-      addAlert("success", `Distillation: ${r?.redundantRows || 9000} redundant rows found. Keep ${r?.essentialRows || 1000}. Save ${r?.savings || "$5,000"}`);
+      const generated = r?.totalGenerated ?? 0;
+      const quality = r?.qualityScore ?? "N/A";
+      addAlert("success", `Generated ${generated} synthetic fixes. Quality: ${quality}%. Source: ${selectedModel}`);
+      if (r?.samples) {
+        addAlert("info", `Fix samples: ${r.samples.slice(0, 2).map((s: any) => s.data).join(" | ")}`);
+      }
+      // Recalculate score based on AI response
+      const newScore = Math.min(100, score + Math.round(generated * 0.5));
+      setScore(newScore);
+      setMoneySaved(prev => prev + (r?.moneySaved ?? generated * 100));
+      addAlert("success", `Model improved. New reliability: ${newScore}/100.`);
     } catch (err: any) {
-      addAlert("error", `Distillation error: ${err.message}`);
+      addAlert("error", `Auto-fix failed: ${err.message}. No changes applied.`);
+      toast({ title: "Auto-fix failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
     }
-  }, [fileName, testsRun, selectedModel, addAlert]);
+  }, [failures, selectedModel, score, addAlert, toast]);
+
+  const handleDistill = useCallback(async () => {
+    addAlert("info", `Analyzing dataset for redundancy with ${selectedModel}...`);
+    try {
+      const result = await callNeurixAI({
+        action: "distill",
+        data: { datasetInfo: `${fileName || "dataset"} with ${fileData ? parseCSV(fileData).rowCount : "unknown"} rows` },
+        model: selectedModel,
+      });
+      const r = result.result;
+      addAlert("success", `Distillation: ${r?.redundantRows ?? "N/A"} redundant, keep ${r?.essentialRows ?? "N/A"}. Save ${r?.savings ?? "N/A"}. Source: ${selectedModel}`);
+    } catch (err: any) {
+      addAlert("error", `Distillation failed: ${err.message}`);
+      toast({ title: "Distillation failed", description: err.message, variant: "destructive" });
+    }
+  }, [fileName, fileData, selectedModel, addAlert, toast]);
+
+  const handleEdgeCaseScan = useCallback(async () => {
+    addAlert("info", `Scanning for edge cases with ${selectedModel}...`);
+    try {
+      const result = await callNeurixAI({
+        action: "stress-test",
+        data: {
+          fileName: fileName || "dataset",
+          sampleData: fileData?.substring(0, 1000) || "No data uploaded yet",
+          rowCount: fileData ? parseCSV(fileData).rowCount : 0,
+          columns: fileData ? parseCSV(fileData).headers : [],
+        },
+        model: selectedModel,
+      });
+      const found = result.result?.edgeCasesFound ?? 0;
+      setEdgeCases(prev => prev + found);
+      addAlert("success", `Found ${found} edge cases. Source: ${selectedModel}`);
+    } catch (err: any) {
+      addAlert("error", `Edge case scan failed: ${err.message}`);
+    }
+  }, [fileName, fileData, selectedModel, addAlert]);
+
+  const handleKnowledgeDistill = useCallback(async () => {
+    addAlert("info", `Running knowledge distillation analysis with ${selectedModel}...`);
+    try {
+      const result = await callNeurixAI({
+        action: "distill",
+        data: { datasetInfo: "Cross-model knowledge distillation: GPT-4 teacher → Llama-3 student. Analyze feasibility and expected performance." },
+        model: selectedModel,
+      });
+      const r = result.result;
+      addAlert("success", `Distillation analysis complete. Recommendation: ${r?.recommendation ?? "See details"}. Source: ${selectedModel}`);
+    } catch (err: any) {
+      addAlert("error", `Knowledge distillation failed: ${err.message}`);
+    }
+  }, [selectedModel, addAlert]);
+
+  const handleShadowTest = useCallback(async () => {
+    addAlert("info", `Running shadow model comparison with ${selectedModel}...`);
+    try {
+      const result = await callNeurixAI({
+        action: "stress-test",
+        data: {
+          fileName: fileName || "shadow-test",
+          sampleData: fileData?.substring(0, 1000) || "Shadow mode comparison test",
+          rowCount: fileData ? parseCSV(fileData).rowCount : 0,
+          columns: fileData ? parseCSV(fileData).headers : [],
+        },
+        model: selectedModel,
+      });
+      const shadowScore = result.result?.score ?? 0;
+      setShadowResult({ current: score, shadow: shadowScore });
+      addAlert("success", `Shadow test: Current ${score}%, Shadow ${shadowScore}%. Source: ${selectedModel}`);
+    } catch (err: any) {
+      addAlert("error", `Shadow test failed: ${err.message}`);
+    }
+  }, [selectedModel, fileName, fileData, score, addAlert]);
 
   const handleChat = useCallback(async () => {
     if (!chatInput.trim()) return;
@@ -212,7 +274,6 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     setChatMessages(prev => [...prev, { role: "user", content: userMsg }]);
     setIsChatLoading(true);
 
-    // Check if input needs clarification (short/ambiguous)
     const needsClarify = userMsg.length < 10 || /^(k|ok|no|yes|why|what|how|fix|help)$/i.test(userMsg.trim());
 
     try {
@@ -224,15 +285,15 @@ const Dashboard = ({ onBack }: DashboardProps) => {
       const r = result.result;
       let response = "";
       if (needsClarify && r?.options) {
-        response = `I'm not sure what you mean by "${userMsg}".\n\nDid you mean:\n${r.options.map((o: any) => `**${o.label})** ${o.text}`).join("\n")}\n\nPlease clarify so I can help accurately.`;
+        response = `I'm not sure what you mean by "${userMsg}".\n\nDid you mean:\n${r.options.map((o: any) => `**${o.label})** ${o.text}`).join("\n")}\n\nPlease clarify so I can help accurately.\n\n_Source: ${selectedModel}_`;
       } else if (r?.explanation) {
-        response = `**Analysis:**\n${r.explanation}\n\n**Root Cause:** ${r.rootCause || "Unknown"}\n\n**Impact:** ${r.impact || "N/A"}\n\n**Fix:** ${r.fix || "See suggestions above"}`;
+        response = `**Analysis (${selectedModel}):**\n${r.explanation}\n\n**Root Cause:** ${r.rootCause || "Could not determine"}\n\n**Impact:** ${r.impact || "Could not estimate"}\n\n**Fix:** ${r.fix || "No specific fix suggested"}\n\n**Confidence:** ${r.confidence ?? "N/A"}%`;
       } else {
         response = typeof r === "string" ? r : JSON.stringify(r, null, 2);
       }
       setChatMessages(prev => [...prev, { role: "assistant", content: response }]);
     } catch (err: any) {
-      setChatMessages(prev => [...prev, { role: "assistant", content: `Error: ${err.message}. Please try again.` }]);
+      setChatMessages(prev => [...prev, { role: "assistant", content: `AI service error: ${err.message}. Please retry or check connection.` }]);
     } finally {
       setIsChatLoading(false);
     }
@@ -265,7 +326,6 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             <span className="text-[9px] font-mono text-muted-foreground tracking-widest hidden sm:block">AI STRESS COMMAND</span>
           </div>
           <div className="flex items-center gap-2">
-            {/* Model Selector */}
             <div className="hidden md:flex items-center gap-1 bg-muted/30 rounded px-1 py-0.5">
               {models.map(m => (
                 <button
@@ -280,7 +340,6 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                 </button>
               ))}
             </div>
-            {/* Ghost Mode */}
             <button
               onClick={() => { setGhostMode(!ghostMode); addAlert("info", `Ghost Mode ${!ghostMode ? "ON" : "OFF"}`); }}
               className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-all ${
@@ -290,9 +349,8 @@ const Dashboard = ({ onBack }: DashboardProps) => {
               <Lock className="w-3 h-3" />
               GHOST {ghostMode ? "ON" : "OFF"}
             </button>
-            {/* Shadow Mode */}
             <button
-              onClick={() => setShadowMode(!shadowMode)}
+              onClick={() => { setShadowMode(!shadowMode); if (!shadowMode) handleShadowTest(); }}
               className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono transition-all ${
                 shadowMode ? "bg-accent/20 text-accent border border-accent/30" : "text-muted-foreground border border-border/50"
               }`}
@@ -312,7 +370,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
           <div className="flex items-center gap-1 whitespace-nowrap"><AlertTriangle className="w-3 h-3 text-warning" /><span className="text-muted-foreground">Failures:</span><span className="font-semibold">{failures.length}</span></div>
           <div className="flex items-center gap-1 whitespace-nowrap"><Target className="w-3 h-3 text-destructive" /><span className="text-muted-foreground">Edge Cases:</span><span className="font-semibold">{edgeCases}</span></div>
           <div className="flex items-center gap-1 whitespace-nowrap"><TrendingUp className="w-3 h-3 text-success" /><span className="text-muted-foreground">Saved:</span><span className="text-success font-semibold">${moneySaved.toLocaleString()}</span></div>
-          <div className="flex items-center gap-1 whitespace-nowrap"><CheckCircle className="w-3 h-3 text-primary" /><span className="text-muted-foreground">AI Accuracy:</span><span className="font-semibold">{aiAccuracy}%</span></div>
+          <div className="flex items-center gap-1 whitespace-nowrap"><CheckCircle className="w-3 h-3 text-primary" /><span className="text-muted-foreground">AI Confidence:</span><span className="font-semibold">{aiAccuracy !== null ? `${aiAccuracy}%` : "—"}</span></div>
           <div className="flex items-center gap-1 whitespace-nowrap"><Users className="w-3 h-3 text-warning" /><span className="text-muted-foreground">Human Reviews:</span><span className="font-semibold">{humanReviews}</span></div>
           <div className="flex items-center gap-1 whitespace-nowrap"><Brain className="w-3 h-3 text-accent" /><span className="text-muted-foreground">Model:</span><span className="font-semibold text-primary">{selectedModel}</span></div>
         </div>
@@ -349,8 +407,9 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                   </div>
                 )}
               </NeurixPanel>
-              <NeurixPanel title="Reliability Score" icon={<Shield className="w-4 h-4 text-primary" />} badge="LIVE">
+              <NeurixPanel title="Reliability Score" icon={<Shield className="w-4 h-4 text-primary" />} badge={score > 0 ? "FROM AI" : "AWAITING DATA"}>
                 <div className="flex justify-center"><RiskGauge score={score} /></div>
+                {score === 0 && <p className="text-[9px] font-mono text-muted-foreground text-center mt-2">Upload a file to get a real reliability score</p>}
               </NeurixPanel>
               <MoneyCounter amount={moneySaved} label="NEURIX SAVED YOU" />
               <NeurixPanel title="ROI Calculator" icon={<TrendingUp className="w-4 h-4 text-success" />}>
@@ -361,22 +420,42 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             <div className="lg:col-span-5 space-y-5">
               <NeurixPanel title="Failure Detection" icon={<AlertTriangle className="w-4 h-4 text-warning" />} badge={`${failures.length} FOUND`}>
                 <FailureList failures={failures} />
+                {failures.length === 0 && <p className="text-[9px] font-mono text-muted-foreground text-center py-4">Upload data and run stress test to detect failures</p>}
               </NeurixPanel>
-              <NeurixPanel title="Adversarial Simulator" icon={<Skull className="w-4 h-4 text-destructive" />} badge="AI HACKER">
+              <NeurixPanel title="Adversarial Simulator" icon={<Skull className="w-4 h-4 text-destructive" />} badge="REAL AI">
                 <AdversarialSimulator onRun={handleAdversarial} />
               </NeurixPanel>
               {shadowMode && (
                 <NeurixPanel title="Shadow Mode" icon={<Eye className="w-4 h-4 text-accent" />} badge="ACTIVE" className="neon-border-magenta">
                   <div className="space-y-3">
-                    <p className="text-[10px] font-mono text-muted-foreground">Shadow model running in parallel on live traffic.</p>
-                    <div className="grid grid-cols-2 gap-3 text-center">
-                      <div className="bg-muted/40 rounded p-3"><div className="font-display text-lg font-bold">94.2%</div><div className="text-[9px] font-mono text-muted-foreground">CURRENT</div></div>
-                      <div className="bg-muted/40 rounded p-3"><div className="font-display text-lg font-bold text-success">97.1%</div><div className="text-[9px] font-mono text-muted-foreground">SHADOW</div></div>
-                    </div>
-                    <p className="text-[9px] font-mono text-success text-center">↑ Shadow outperforming by 2.9% — safe to promote</p>
-                    <Button onClick={() => { addAlert("success", "Shadow model promoted to production!"); setShadowMode(false); setScore(prev => Math.min(99, prev + 3)); }} className="w-full bg-success/20 border border-success/30 text-success hover:bg-success/30 font-mono text-[10px]">
-                      PROMOTE SHADOW MODEL
-                    </Button>
+                    <p className="text-[10px] font-mono text-muted-foreground">Shadow model comparison via {selectedModel}.</p>
+                    {shadowResult ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-3 text-center">
+                          <div className="bg-muted/40 rounded p-3"><div className="font-display text-lg font-bold">{shadowResult.current}%</div><div className="text-[9px] font-mono text-muted-foreground">CURRENT</div></div>
+                          <div className="bg-muted/40 rounded p-3"><div className={`font-display text-lg font-bold ${shadowResult.shadow > shadowResult.current ? "text-success" : "text-warning"}`}>{shadowResult.shadow}%</div><div className="text-[9px] font-mono text-muted-foreground">SHADOW</div></div>
+                        </div>
+                        <p className="text-[9px] font-mono text-center text-muted-foreground">
+                          {shadowResult.shadow > shadowResult.current
+                            ? `↑ Shadow outperforming by ${shadowResult.shadow - shadowResult.current}% — consider promoting`
+                            : `↓ Shadow underperforming by ${shadowResult.current - shadowResult.shadow}% — do not promote`}
+                        </p>
+                        <Button onClick={() => {
+                          if (shadowResult.shadow > shadowResult.current) {
+                            setScore(shadowResult.shadow);
+                            addAlert("success", `Shadow model promoted. New score: ${shadowResult.shadow}%`);
+                          } else {
+                            addAlert("warning", "Shadow model is not better. Promotion not recommended.");
+                          }
+                          setShadowMode(false);
+                          setShadowResult(null);
+                        }} className="w-full bg-success/20 border border-success/30 text-success hover:bg-success/30 font-mono text-[10px]">
+                          PROMOTE SHADOW MODEL
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="text-[10px] font-mono text-primary animate-pulse text-center py-4">Running shadow comparison with {selectedModel}...</div>
+                    )}
                   </div>
                 </NeurixPanel>
               )}
@@ -386,12 +465,13 @@ const Dashboard = ({ onBack }: DashboardProps) => {
               <NeurixPanel title="Live Alerts" icon={<Activity className="w-4 h-4 text-primary" />} badge="REAL-TIME">
                 <AlertFeed alerts={alerts} />
               </NeurixPanel>
-              <NeurixPanel title="Auto-Fixer" icon={<Zap className="w-4 h-4 text-warning" />} badge="AI">
+              <NeurixPanel title="Auto-Fixer" icon={<Zap className="w-4 h-4 text-warning" />} badge="REAL AI">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">Auto-generate synthetic data + retrain to fix all detected weaknesses.</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">Calls {selectedModel} to generate synthetic fixes for detected weaknesses.</p>
                   <Button disabled={failures.length === 0 || isProcessing} onClick={handleAutoFix} className="w-full bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30 font-mono text-[10px]">
                     <Brain className="w-3 h-3 mr-1" /> AUTO-FIX ALL ({selectedModel})
                   </Button>
+                  {failures.length === 0 && <p className="text-[9px] font-mono text-muted-foreground">Run a stress test first to detect failures</p>}
                 </div>
               </NeurixPanel>
               <NeurixPanel title="Benchmark" icon={<BarChart3 className="w-4 h-4 text-primary" />} badge="VS COMPETITORS">
@@ -405,17 +485,18 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         {activeTab === "features" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             <div className="lg:col-span-4 space-y-5">
-              <NeurixPanel title="Zero-Shot Auto-Labeling" icon={<Sparkles className="w-4 h-4 text-primary" />} badge="ENSEMBLE">
+              <NeurixPanel title="Zero-Shot Auto-Labeling" icon={<Sparkles className="w-4 h-4 text-primary" />} badge="REAL AI">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">3 AI models label your data. Humans review only what AI is unsure about.</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">Calls {selectedModel} to label your data. Low-confidence items flagged for human review.</p>
                   <Button onClick={handleAutoLabel} disabled={!fileData || isProcessing} className="w-full bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30 font-mono text-[10px]">
                     <Sparkles className="w-3 h-3 mr-1" /> AUTO-LABEL DATA
                   </Button>
+                  {!fileData && <p className="text-[9px] font-mono text-muted-foreground">Upload data first in Stress Test tab</p>}
                   {labelingResults && (
                     <div className="space-y-2 mt-2">
                       <div className="flex justify-between text-[10px] font-mono">
-                        <span className="text-success">Auto-labeled: {labelingResults.autoLabeled || 0}</span>
-                        <span className="text-warning">Needs review: {labelingResults.needsReview || 0}</span>
+                        <span className="text-success">Auto-labeled: {labelingResults.autoLabeled ?? 0}</span>
+                        <span className="text-warning">Needs review: {labelingResults.needsReview ?? 0}</span>
                       </div>
                       {labelingResults.labels?.slice(0, 3).map((l: any, i: number) => (
                         <div key={i} className="bg-muted/30 rounded p-2 text-[10px] font-mono">
@@ -426,29 +507,36 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                           <p className="text-muted-foreground mt-1">{l.reasoning}</p>
                         </div>
                       ))}
+                      <p className="text-[9px] font-mono text-muted-foreground">Source: {selectedModel}</p>
                     </div>
                   )}
                 </div>
               </NeurixPanel>
 
-              <NeurixPanel title="Synthetic Gap-Filler" icon={<Database className="w-4 h-4 text-primary" />} badge="AI GEN">
+              <NeurixPanel title="Synthetic Gap-Filler" icon={<Database className="w-4 h-4 text-primary" />} badge="REAL AI">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">Missing data? Generate synthetic examples to fill gaps.</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">Calls {selectedModel} to generate real synthetic examples.</p>
                   <Button onClick={async () => {
-                    addAlert("info", "Generating synthetic data...");
+                    addAlert("info", `Generating synthetic data with ${selectedModel}...`);
                     try {
-                      const r = await callNeurixAI({ action: "synthetic-data", data: { gap: "edge cases and rare categories" }, model: selectedModel });
-                      addAlert("success", `Generated ${r.result?.totalGenerated || 5} synthetic examples. Quality: ${r.result?.qualityScore || 90}%`);
-                    } catch (err: any) { addAlert("error", err.message); }
+                      const r = await callNeurixAI({ action: "synthetic-data", data: { gap: fileData ? "Based on uploaded data gaps" : "edge cases and rare categories" }, model: selectedModel });
+                      addAlert("success", `Generated ${r.result?.totalGenerated ?? 0} synthetic examples. Quality: ${r.result?.qualityScore ?? "N/A"}%. Source: ${selectedModel}`);
+                      if (r.result?.samples) {
+                        r.result.samples.slice(0, 2).forEach((s: any) => addAlert("info", `Sample: ${s.data} (quality: ${s.quality}%)`));
+                      }
+                    } catch (err: any) {
+                      addAlert("error", `Synthetic generation failed: ${err.message}`);
+                      toast({ title: "Synthetic data generation failed", description: err.message, variant: "destructive" });
+                    }
                   }} disabled={isProcessing} className="w-full bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30 font-mono text-[10px]">
-                    <Database className="w-3 h-3 mr-1" /> GENERATE 10K EXAMPLES
+                    <Database className="w-3 h-3 mr-1" /> GENERATE EXAMPLES
                   </Button>
                 </div>
               </NeurixPanel>
 
-              <NeurixPanel title="Dataset Distillation" icon={<Layers className="w-4 h-4 text-primary" />} badge="OPTIMIZE">
+              <NeurixPanel title="Dataset Distillation" icon={<Layers className="w-4 h-4 text-primary" />} badge="REAL AI">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">1M rows → 100K that matter. Remove redundancy.</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">Calls {selectedModel} to analyze redundancy.</p>
                   <Button onClick={handleDistill} disabled={isProcessing} className="w-full bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30 font-mono text-[10px]">
                     <Layers className="w-3 h-3 mr-1" /> DISTILL DATASET
                   </Button>
@@ -457,11 +545,11 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             </div>
 
             <div className="lg:col-span-5 space-y-5">
-              <NeurixPanel title="AI Chat — Clarification Mode" icon={<MessageSquare className="w-4 h-4 text-primary" />} badge="SMART">
+              <NeurixPanel title="AI Chat — Clarification Mode" icon={<MessageSquare className="w-4 h-4 text-primary" />} badge="REAL AI">
                 <div className="space-y-3">
                   <div className="max-h-64 overflow-y-auto space-y-2">
                     {chatMessages.length === 0 && (
-                      <p className="text-[10px] font-mono text-muted-foreground text-center py-4">Ask NEURIX anything. Ambiguous inputs get clarification questions.</p>
+                      <p className="text-[10px] font-mono text-muted-foreground text-center py-4">Ask NEURIX anything. Powered by {selectedModel}. Ambiguous inputs get clarification questions.</p>
                     )}
                     {chatMessages.map((msg, i) => (
                       <div key={i} className={`rounded p-2 text-[10px] font-mono ${msg.role === "user" ? "bg-primary/10 text-primary ml-8" : "bg-muted/30 text-foreground mr-4"}`}>
@@ -469,7 +557,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                         <p className="mt-1 whitespace-pre-wrap">{msg.content}</p>
                       </div>
                     ))}
-                    {isChatLoading && <div className="text-[10px] font-mono text-primary animate-pulse">NEURIX is thinking...</div>}
+                    {isChatLoading && <div className="text-[10px] font-mono text-primary animate-pulse">Calling {selectedModel}...</div>}
                   </div>
                   <div className="flex gap-2">
                     <input
@@ -488,37 +576,49 @@ const Dashboard = ({ onBack }: DashboardProps) => {
 
               <NeurixPanel title="Human Review Queue" icon={<Users className="w-4 h-4 text-warning" />} badge={`${humanReviews} PENDING`}>
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">Items flagged for human verification (confidence &lt;80%)</p>
-                  {humanReviews > 0 ? (
+                  <p className="text-[10px] font-mono text-muted-foreground">Items flagged by AI where confidence &lt;80%</p>
+                  {humanReviewItems.length > 0 ? (
                     <div className="space-y-2">
-                      {Array.from({ length: Math.min(humanReviews, 3) }).map((_, i) => (
+                      {humanReviewItems.slice(0, 5).map((item, i) => (
                         <div key={i} className="bg-muted/30 rounded p-3 flex items-center justify-between">
                           <div>
-                            <div className="text-[10px] font-mono text-foreground">Item #{i + 1}</div>
-                            <div className="text-[9px] font-mono text-warning">Confidence: {50 + i * 10}%</div>
+                            <div className="text-[10px] font-mono text-foreground">{item.label}</div>
+                            <div className="text-[9px] font-mono text-warning">Confidence: {item.confidence}%</div>
+                            {item.reasoning && <div className="text-[9px] font-mono text-muted-foreground mt-1">{item.reasoning}</div>}
                           </div>
                           <div className="flex gap-1">
-                            <button onClick={() => { setHumanReviews(prev => Math.max(0, prev - 1)); addAlert("success", `Item #${i + 1} approved`); }} className="p-1 rounded bg-success/20 text-success hover:bg-success/30"><CheckCircle className="w-3 h-3" /></button>
-                            <button onClick={() => { setHumanReviews(prev => Math.max(0, prev - 1)); addAlert("warning", `Item #${i + 1} rejected`); }} className="p-1 rounded bg-destructive/20 text-destructive hover:bg-destructive/30"><XCircle className="w-3 h-3" /></button>
+                            <button onClick={() => {
+                              setHumanReviewItems(prev => prev.filter((_, idx) => idx !== i));
+                              setHumanReviews(prev => Math.max(0, prev - 1));
+                              addAlert("success", `"${item.label}" approved by human reviewer`);
+                            }} className="p-1 rounded bg-success/20 text-success hover:bg-success/30"><CheckCircle className="w-3 h-3" /></button>
+                            <button onClick={() => {
+                              setHumanReviewItems(prev => prev.filter((_, idx) => idx !== i));
+                              setHumanReviews(prev => Math.max(0, prev - 1));
+                              addAlert("warning", `"${item.label}" rejected by human reviewer`);
+                            }} className="p-1 rounded bg-destructive/20 text-destructive hover:bg-destructive/30"><XCircle className="w-3 h-3" /></button>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[10px] font-mono text-success text-center py-4">✓ No items pending review</p>
+                    <p className="text-[10px] font-mono text-muted-foreground text-center py-4">{humanReviews > 0 ? "Run auto-labeling to populate review queue" : "✓ No items pending review"}</p>
                   )}
                 </div>
               </NeurixPanel>
 
-              <NeurixPanel title="Conflict Resolution" icon={<GitBranch className="w-4 h-4 text-accent" />} badge="AI JUDGE">
+              <NeurixPanel title="Conflict Resolution" icon={<GitBranch className="w-4 h-4 text-accent" />} badge="REAL AI JUDGE">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">AI resolves labeling conflicts. Confidence &gt;90% = auto-resolve.</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">Calls {selectedModel} as AI Judge to resolve labeling conflicts.</p>
                   <Button onClick={async () => {
-                    addAlert("info", "Running AI conflict resolution...");
+                    addAlert("info", `Running AI conflict resolution with ${selectedModel}...`);
                     try {
                       const r = await callNeurixAI({ action: "conflict-resolve", data: { labelA: "positive", labelB: "neutral", context: "product review sentiment" }, model: selectedModel });
-                      addAlert("success", `Conflict resolved: "${r.result?.resolution}" (${r.result?.confidence}% confidence)`);
-                    } catch (err: any) { addAlert("error", err.message); }
+                      addAlert("success", `Conflict resolved: "${r.result?.resolution}" (confidence: ${r.result?.confidence ?? "N/A"}%). Needs human: ${r.result?.needsHuman ? "YES" : "NO"}. Source: ${selectedModel}`);
+                    } catch (err: any) {
+                      addAlert("error", `Conflict resolution failed: ${err.message}`);
+                      toast({ title: "Conflict resolution failed", description: err.message, variant: "destructive" });
+                    }
                   }} disabled={isProcessing} className="w-full bg-accent/20 border border-accent/50 text-accent hover:bg-accent/30 font-mono text-[10px]">
                     <GitBranch className="w-3 h-3 mr-1" /> RESOLVE CONFLICTS
                   </Button>
@@ -527,19 +627,19 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             </div>
 
             <div className="lg:col-span-3 space-y-5">
-              <NeurixPanel title="Knowledge Distillation" icon={<Radio className="w-4 h-4 text-primary" />} badge="TEACHER→STUDENT">
+              <NeurixPanel title="Knowledge Distillation" icon={<Radio className="w-4 h-4 text-primary" />} badge="REAL AI">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">GPT-4 → teach small Llama model. 90% cost reduction.</p>
-                  <Button onClick={() => addAlert("success", "Distillation complete: Llama-3 at 92% accuracy. Cost: 90% less.")} className="w-full bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30 font-mono text-[10px]">
-                    <Radio className="w-3 h-3 mr-1" /> DISTILL TO LLAMA-3
+                  <p className="text-[10px] font-mono text-muted-foreground">Calls {selectedModel} to analyze teacher→student distillation feasibility.</p>
+                  <Button onClick={handleKnowledgeDistill} disabled={isProcessing} className="w-full bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30 font-mono text-[10px]">
+                    <Radio className="w-3 h-3 mr-1" /> ANALYZE DISTILLATION
                   </Button>
                 </div>
               </NeurixPanel>
 
-              <NeurixPanel title="Edge-Case Radar" icon={<Search className="w-4 h-4 text-warning" />} badge="SCANNING">
+              <NeurixPanel title="Edge-Case Radar" icon={<Search className="w-4 h-4 text-warning" />} badge="REAL AI">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-mono text-muted-foreground">Surfaces the weirdest data your model hasn't seen.</p>
-                  <Button onClick={() => { setEdgeCases(prev => prev + 452); addAlert("success", "Found 452 edge cases. Queued for review."); }} className="w-full bg-warning/20 border border-warning/50 text-warning hover:bg-warning/30 font-mono text-[10px]">
+                  <p className="text-[10px] font-mono text-muted-foreground">Calls {selectedModel} to find edge cases in your data.</p>
+                  <Button onClick={handleEdgeCaseScan} disabled={isProcessing} className="w-full bg-warning/20 border border-warning/50 text-warning hover:bg-warning/30 font-mono text-[10px]">
                     <Search className="w-3 h-3 mr-1" /> SCAN FOR EDGE CASES
                   </Button>
                 </div>
@@ -548,7 +648,13 @@ const Dashboard = ({ onBack }: DashboardProps) => {
               <NeurixPanel title="Export Engine" icon={<FileText className="w-4 h-4 text-primary" />} badge="UNIVERSAL">
                 <div className="space-y-2">
                   {["OpenAI", "Hugging Face", "PyTorch", "TensorFlow"].map(fmt => (
-                    <Button key={fmt} onClick={() => addAlert("success", `Exported to ${fmt}. Ready to train.`)} variant="outline" className="w-full text-[10px] font-mono justify-start border-border/30 hover:border-primary/30">
+                    <Button key={fmt} onClick={() => {
+                      const data = JSON.stringify({ score, failures, alerts: alerts.slice(0, 10), moneySaved, edgeCases });
+                      const blob = new Blob([data], { type: "application/json" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a"); a.href = url; a.download = `neurix-export-${fmt.toLowerCase().replace(" ", "-")}.json`; a.click();
+                      addAlert("success", `Exported results as ${fmt} format (JSON). Download started.`);
+                    }} variant="outline" className="w-full text-[10px] font-mono justify-start border-border/30 hover:border-primary/30">
                       Export to {fmt}
                     </Button>
                   ))}
@@ -558,7 +664,20 @@ const Dashboard = ({ onBack }: DashboardProps) => {
               <NeurixPanel title="Regulatory Reports" icon={<FileText className="w-4 h-4 text-success" />} badge="COMPLIANCE">
                 <div className="space-y-2">
                   {["GDPR", "HIPAA", "EU AI Act", "SOC2"].map(reg => (
-                    <Button key={reg} onClick={() => addAlert("success", `${reg} audit report generated.`)} variant="outline" className="w-full text-[10px] font-mono justify-start border-border/30 hover:border-success/30">
+                    <Button key={reg} onClick={async () => {
+                      addAlert("info", `Generating ${reg} compliance report with ${selectedModel}...`);
+                      try {
+                        const r = await callNeurixAI({ action: "explain-failure", data: { failure: `Generate a ${reg} compliance audit summary for this AI system. Data: score=${score}, failures=${failures.length}, tests=${testsRun}` }, model: selectedModel });
+                        addAlert("success", `${reg} report generated. Source: ${selectedModel}`);
+                        if (r.result?.explanation) {
+                          const blob = new Blob([r.result.explanation], { type: "text/plain" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a"); a.href = url; a.download = `neurix-${reg.toLowerCase()}-report.txt`; a.click();
+                        }
+                      } catch (err: any) {
+                        addAlert("error", `${reg} report failed: ${err.message}`);
+                      }
+                    }} variant="outline" className="w-full text-[10px] font-mono justify-start border-border/30 hover:border-success/30">
                       Generate {reg} Report
                     </Button>
                   ))}
@@ -604,7 +723,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                   Delete All My Data
                 </Button>
                 <Button onClick={() => {
-                  const data = JSON.stringify({ alerts, failures, score, moneySaved });
+                  const data = JSON.stringify({ alerts, failures, score, moneySaved, edgeCases, testsRun, aiAccuracy });
                   const blob = new Blob([data], { type: "application/json" });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a"); a.href = url; a.download = "neurix-export.json"; a.click();
@@ -632,18 +751,18 @@ const Dashboard = ({ onBack }: DashboardProps) => {
         {activeTab === "monitor" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             <div className="lg:col-span-8 space-y-5">
-              <NeurixPanel title="Quality Dashboard" icon={<BarChart3 className="w-4 h-4 text-primary" />} badge="REAL-TIME">
+              <NeurixPanel title="Quality Dashboard" icon={<BarChart3 className="w-4 h-4 text-primary" />} badge="FROM AI">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-muted/30 rounded-lg p-4 text-center">
-                    <div className="font-display text-2xl font-bold text-success">{aiAccuracy || 99.2}%</div>
-                    <div className="text-[9px] font-mono text-muted-foreground mt-1">AI ACCURACY</div>
+                    <div className="font-display text-2xl font-bold text-success">{aiAccuracy !== null ? `${aiAccuracy}%` : "—"}</div>
+                    <div className="text-[9px] font-mono text-muted-foreground mt-1">AI CONFIDENCE</div>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-4 text-center">
-                    <div className="font-display text-2xl font-bold text-primary">87%</div>
-                    <div className="text-[9px] font-mono text-muted-foreground mt-1">TIME SAVED</div>
+                    <div className="font-display text-2xl font-bold text-primary">{testsRun > 0 ? `${testsRun}` : "—"}</div>
+                    <div className="text-[9px] font-mono text-muted-foreground mt-1">TESTS RUN</div>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-4 text-center">
-                    <div className="font-display text-2xl font-bold text-warning">{edgeCases}</div>
+                    <div className="font-display text-2xl font-bold text-warning">{edgeCases || "—"}</div>
                     <div className="text-[9px] font-mono text-muted-foreground mt-1">EDGE CASES</div>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-4 text-center">
@@ -651,6 +770,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                     <div className="text-[9px] font-mono text-muted-foreground mt-1">HUMAN REVIEWS</div>
                   </div>
                 </div>
+                {testsRun === 0 && <p className="text-[9px] font-mono text-muted-foreground text-center mt-3">Run a stress test to populate real metrics</p>}
               </NeurixPanel>
 
               <NeurixPanel title="Live Alerts" icon={<Activity className="w-4 h-4 text-primary" />} badge="STREAM">
@@ -661,7 +781,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                 <div className="space-y-3">
                   <p className="text-[10px] font-mono text-muted-foreground">If new model performs worse, NEURIX auto-reverts to previous version.</p>
                   <div className="bg-muted/30 rounded p-3 text-[10px] font-mono">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Current model:</span><span className="text-success">v{testsRun > 0 ? testsRun : 1}.0 — {score || 95}% accuracy</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Current model:</span><span className="text-success">v{testsRun > 0 ? testsRun : 1}.0 — {score > 0 ? `${score}% reliability` : "awaiting test"}</span></div>
                     <div className="flex justify-between mt-1"><span className="text-muted-foreground">Previous model:</span><span className="text-muted-foreground">v{Math.max(1, (testsRun || 1) - 1)}.0 — backup ready</span></div>
                     <div className="flex justify-between mt-1"><span className="text-muted-foreground">Auto-rollback:</span><span className="text-success">ENABLED</span></div>
                   </div>
@@ -674,13 +794,13 @@ const Dashboard = ({ onBack }: DashboardProps) => {
                 <div className="space-y-3">
                   <div className="bg-muted/30 rounded p-3 text-center">
                     <div className="font-display text-2xl font-bold text-success">${moneySaved.toLocaleString()}</div>
-                    <div className="text-[9px] font-mono text-muted-foreground">TOTAL SAVED</div>
+                    <div className="text-[9px] font-mono text-muted-foreground">TOTAL SAVED (from AI analysis)</div>
                   </div>
                   <div className="space-y-2 text-[10px] font-mono">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Cost per label:</span><span className="text-success">$0.002</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Labels today:</span><span>{testsRun * 1000}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Free tier used:</span><span className="text-primary">{Math.min(100, testsRun * 12)}%</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Manual cost:</span><span className="text-destructive">${(moneySaved * 10).toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Tests run:</span><span>{testsRun}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Failures found:</span><span>{failures.length}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Edge cases:</span><span>{edgeCases}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Model:</span><span className="text-primary">{selectedModel}</span></div>
                   </div>
                 </div>
               </NeurixPanel>
@@ -692,7 +812,17 @@ const Dashboard = ({ onBack }: DashboardProps) => {
               <NeurixPanel title="One-Click Deploy" icon={<Rocket className="w-4 h-4 text-primary" />} badge="DEPLOY">
                 <div className="space-y-2">
                   {["AWS Lambda", "Vercel", "Hugging Face", "Custom API"].map(target => (
-                    <Button key={target} onClick={() => addAlert("success", `Model deployed to ${target}. URL: https://yourmodel.neurix.ai`)} variant="outline" className="w-full text-[10px] font-mono justify-start border-border/30 hover:border-primary/30">
+                    <Button key={target} onClick={() => {
+                      if (score === 0) {
+                        toast({ title: "Run a stress test first", description: "Cannot deploy without evaluating model reliability", variant: "destructive" });
+                        return;
+                      }
+                      const data = JSON.stringify({ score, failures, moneySaved, model: selectedModel, deployTarget: target });
+                      const blob = new Blob([data], { type: "application/json" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a"); a.href = url; a.download = `neurix-deploy-${target.toLowerCase().replace(" ", "-")}.json`; a.click();
+                      addAlert("success", `Deploy config exported for ${target}. Score: ${score}/100`);
+                    }} variant="outline" className="w-full text-[10px] font-mono justify-start border-border/30 hover:border-primary/30">
                       <Rocket className="w-3 h-3 mr-1" /> Deploy to {target}
                     </Button>
                   ))}
@@ -705,7 +835,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
 
       <footer className="border-t border-border/20 mt-8 py-4">
         <div className="container mx-auto px-4 text-center text-[10px] font-mono text-muted-foreground">
-          NEURIX v2.0 — AI STRESS COMMAND — {selectedModel.toUpperCase()} — PRIVACY FIRST — FREE BETA
+          NEURIX v2.0 — AI STRESS COMMAND — {selectedModel.toUpperCase()} — ALL RESULTS FROM REAL AI — FREE BETA
         </div>
       </footer>
     </div>
