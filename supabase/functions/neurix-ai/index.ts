@@ -136,7 +136,6 @@ Generate 5 high-quality examples.`;
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.7,
       }),
     });
 
