@@ -105,58 +105,73 @@ const Dashboard = ({ onBack }: DashboardProps) => {
   }, []);
 
   const handleFileSelect = useCallback(async (file: File) => {
+    const startUpload = performance.now();
     setIsProcessing(true);
     setFileName(file.name);
     addAlert("info", `Processing ${file.name}...`);
+    const modelId = crypto.randomUUID();
     try {
       const text = await file.text();
       const processedText = ghostMode ? maskPII(text) : text;
       setFileData(processedText);
       if (ghostMode) addAlert("info", "Ghost Mode: PII redacted before processing");
       const parsed = parseCSV(processedText);
+      void logAction("upload_model", "success", performance.now() - startUpload,
+        { fileName: file.name, rows: parsed.rowCount, columns: parsed.headers.length, ghostMode }, modelId);
       addAlert("info", `Parsed ${parsed.rowCount} rows, ${parsed.headers.length} columns`);
       addAlert("info", `Running AI stress test with ${selectedModel.toUpperCase()}...`);
-      const result = await callNeurixAI({
-        action: "stress-test",
-        data: { fileName: file.name, sampleData: processedText.substring(0, 2000), rowCount: parsed.rowCount, columns: parsed.headers },
-        model: selectedModel,
-      });
-      const r = result.result;
-      if (r) {
-        setPrevScore(score);
-        setScore(r.score ?? 0);
-        const parsedFailures: Failure[] = (r.failures || []).map((f: any, i: number) => ({
-          id: `f-${Date.now()}-${i}`, type: f.type || "warning", title: f.title || "Unknown Failure",
-          description: f.description || "", impact: f.impact || "Unknown", fix: f.fix || "No fix suggested",
-        }));
-        setFailures(parsedFailures);
-        setMoneySaved(prev => prev + (r.moneySaved ?? 0));
-        setEdgeCases(prev => prev + (r.edgeCasesFound ?? 0));
-        setAiAccuracy(r.confidenceScore ?? null);
-        addAlert("warning", `${parsedFailures.length} vulnerabilities detected by ${selectedModel}`);
-        addAlert("success", `Analysis complete. Reliability: ${r.score ?? "N/A"}/100. Source: ${selectedModel}`);
-
-        // Generate ELI5 data from results
-        setEli5Data({
-          technical: `Model scored ${r.score}/100 reliability. ${parsedFailures.length} failures detected across ${parsed.rowCount} rows. ${r.edgeCasesFound ?? 0} edge cases identified. Confidence interval: ${r.confidenceScore ?? "N/A"}%. Critical failures: ${parsedFailures.filter(f => f.type === "critical").length}.`,
-          simple: `Your AI model is ${r.score >= 80 ? "pretty good" : r.score >= 50 ? "okay but needs work" : "struggling"} — it scored ${r.score} out of 100. We found ${parsedFailures.length} problems that could cause issues. ${parsedFailures.filter(f => f.type === "critical").length > 0 ? "Some are serious and need fixing right away." : "None are critical, but they should still be addressed."} We estimate fixing these could save you $${(r.moneySaved ?? 0).toLocaleString()}.`,
+      const startTest = performance.now();
+      try {
+        const result = await callNeurixAI({
+          action: "stress-test",
+          data: { fileName: file.name, sampleData: processedText.substring(0, 2000), rowCount: parsed.rowCount, columns: parsed.headers },
+          model: selectedModel,
         });
+        const r = result.result;
+        if (r) {
+          setPrevScore(score);
+          setScore(r.score ?? 0);
+          const parsedFailures: Failure[] = (r.failures || []).map((f: any, i: number) => ({
+            id: `f-${Date.now()}-${i}`, type: f.type || "warning", title: f.title || "Unknown Failure",
+            description: f.description || "", impact: f.impact || "Unknown", fix: f.fix || "No fix suggested",
+          }));
+          setFailures(parsedFailures);
+          setMoneySaved(prev => prev + (r.moneySaved ?? 0));
+          setEdgeCases(prev => prev + (r.edgeCasesFound ?? 0));
+          setAiAccuracy(r.confidenceScore ?? null);
+          addAlert("warning", `${parsedFailures.length} vulnerabilities detected by ${selectedModel}`);
+          addAlert("success", `Analysis complete. Reliability: ${r.score ?? "N/A"}/100. Source: ${selectedModel}`);
 
-        // Generate failure predictions
-        setPredictions(parsedFailures.slice(0, 5).map((f, i) => ({
-          type: f.title, probability: Math.max(20, 95 - i * 15), severity: f.type as any, description: f.description,
-        })));
+          void logAction("test_model", "success", performance.now() - startTest,
+            { failures_found: parsedFailures.length, risk_score: r.score ?? 0, model: selectedModel, edge_cases: r.edgeCasesFound ?? 0 },
+            modelId);
 
-        // Push notification simulation
-        if (parsedFailures.some(f => f.type === "critical")) {
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("🚨 NEURIX Alert", { body: `${parsedFailures.filter(f => f.type === "critical").length} critical vulnerabilities found!`, icon: "/favicon.ico" });
+          // Generate ELI5 data from results
+          setEli5Data({
+            technical: `Model scored ${r.score}/100 reliability. ${parsedFailures.length} failures detected across ${parsed.rowCount} rows. ${r.edgeCasesFound ?? 0} edge cases identified. Confidence interval: ${r.confidenceScore ?? "N/A"}%. Critical failures: ${parsedFailures.filter(f => f.type === "critical").length}.`,
+            simple: `Your AI model is ${r.score >= 80 ? "pretty good" : r.score >= 50 ? "okay but needs work" : "struggling"} — it scored ${r.score} out of 100. We found ${parsedFailures.length} problems that could cause issues. ${parsedFailures.filter(f => f.type === "critical").length > 0 ? "Some are serious and need fixing right away." : "None are critical, but they should still be addressed."} We estimate fixing these could save you $${(r.moneySaved ?? 0).toLocaleString()}.`,
+          });
+
+          // Generate failure predictions
+          setPredictions(parsedFailures.slice(0, 5).map((f, i) => ({
+            type: f.title, probability: Math.max(20, 95 - i * 15), severity: f.type as any, description: f.description,
+          })));
+
+          // Push notification simulation
+          if (parsedFailures.some(f => f.type === "critical")) {
+            if ("Notification" in window && Notification.permission === "granted") {
+              new Notification("🚨 NEURIX Alert", { body: `${parsedFailures.filter(f => f.type === "critical").length} critical vulnerabilities found!`, icon: "/favicon.ico" });
+            }
+            toast({ title: "🚨 Critical Vulnerability Found", description: `${parsedFailures.filter(f => f.type === "critical").length} critical failures detected`, variant: "destructive" });
           }
-          toast({ title: "🚨 Critical Vulnerability Found", description: `${parsedFailures.filter(f => f.type === "critical").length} critical failures detected`, variant: "destructive" });
         }
+        setTestsRun(prev => prev + 1);
+      } catch (err: any) {
+        void logAction("test_model", "failure", performance.now() - startTest, { error: err.message, model: selectedModel }, modelId);
+        throw err;
       }
-      setTestsRun(prev => prev + 1);
     } catch (err: any) {
+      void logAction("upload_model", "failure", performance.now() - startUpload, { error: err.message, fileName: file.name }, modelId);
       addAlert("error", `AI stress test failed: ${err.message}`);
       toast({ title: "Stress test failed", description: err.message, variant: "destructive" });
     } finally {
