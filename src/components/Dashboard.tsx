@@ -327,6 +327,7 @@ const Dashboard = ({ onBack }: DashboardProps) => {
     { id: "monitor", label: "MONITOR", icon: <Activity className="w-3 h-3" /> },
     { id: "privacy", label: "PRIVACY", icon: <Lock className="w-3 h-3" /> },
     { id: "copilot", label: "COPILOT", icon: <Bot className="w-3 h-3" /> },
+    { id: "trust", label: "TRUST", icon: <Shield className="w-3 h-3" /> },
   ];
 
   return (
