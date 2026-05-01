@@ -43,10 +43,12 @@ import type { ShadowEvent } from "@/components/features/ShadowMonitor";
 import { callNeurixAI, parseCSV, maskPII } from "@/lib/neurix-api";
 import type { AIModel } from "@/lib/neurix-api";
 import { useToast } from "@/hooks/use-toast";
+import TrustPanel from "@/components/features/TrustPanel";
+import { logAction } from "@/lib/trust-store";
 
 interface DashboardProps { onBack: () => void; }
 
-type Tab = "stress" | "features" | "battle" | "monitor" | "privacy" | "copilot";
+type Tab = "stress" | "features" | "battle" | "monitor" | "privacy" | "copilot" | "trust";
 
 const Dashboard = ({ onBack }: DashboardProps) => {
   const { toast } = useToast();
