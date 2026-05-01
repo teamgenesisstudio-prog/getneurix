@@ -781,6 +781,9 @@ const Dashboard = ({ onBack }: DashboardProps) => {
             </div>
           </div>
         )}
+
+        {/* ==================== TRUST TAB ==================== */}
+        {activeTab === "trust" && <TrustPanel />}
       </main>
 
       <footer className="border-t border-border/20 mt-8 py-4">
