@@ -124,7 +124,7 @@ export async function logForensic(opts: {
   cost?: number; tokens?: number; metadata?: Record<string, unknown>;
 }) {
   try {
-    await supabase.from("forensic_logs").insert({
+    await (supabase.from("forensic_logs") as any).insert({
       session_id: opts.sessionId,
       event_type: opts.eventType,
       severity: opts.severity || "info",
