@@ -14,7 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      forensic_logs: {
+        Row: {
+          cost_usd: number | null
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          model: string | null
+          prompt_excerpt: string | null
+          response_excerpt: string | null
+          session_id: string
+          severity: string
+          tokens: number | null
+          user_label: string | null
+          violation_clause: string | null
+        }
+        Insert: {
+          cost_usd?: number | null
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          model?: string | null
+          prompt_excerpt?: string | null
+          response_excerpt?: string | null
+          session_id: string
+          severity?: string
+          tokens?: number | null
+          user_label?: string | null
+          violation_clause?: string | null
+        }
+        Update: {
+          cost_usd?: number | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          model?: string | null
+          prompt_excerpt?: string | null
+          response_excerpt?: string | null
+          session_id?: string
+          severity?: string
+          tokens?: number | null
+          user_label?: string | null
+          violation_clause?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
