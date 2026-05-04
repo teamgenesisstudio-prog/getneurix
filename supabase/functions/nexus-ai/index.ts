@@ -43,24 +43,23 @@ function scan(text: string) {
   return findings;
 }
 
-async function callOpenAI(prompt: string, system: string, key: string) {
+async function callGatewayModel(prompt: string, system: string, key: string, model: string, label: string) {
   const t0 = Date.now();
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model,
       messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
-      max_tokens: 500,
     }),
   });
   const j = await r.json();
-  if (!r.ok) throw new Error(`OpenAI: ${j.error?.message || r.status}`);
+  if (!r.ok) throw new Error(`${label}: ${j.error?.message || r.status}`);
   return {
     text: j.choices?.[0]?.message?.content || "",
     latency: Date.now() - t0,
     tokens: j.usage?.total_tokens || 0,
-    model: "gpt-4o-mini",
+    model,
   };
 }
 
