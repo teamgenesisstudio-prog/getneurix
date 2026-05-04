@@ -63,26 +63,6 @@ async function callGatewayModel(prompt: string, system: string, key: string, mod
   };
 }
 
-async function callGemini(prompt: string, system: string, key: string) {
-  const t0 = Date.now();
-  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
-    }),
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error(`Gemini: ${j.error?.message || r.status}`);
-  return {
-    text: j.choices?.[0]?.message?.content || "",
-    latency: Date.now() - t0,
-    tokens: j.usage?.total_tokens || 0,
-    model: "google/gemini-2.5-flash",
-  };
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
