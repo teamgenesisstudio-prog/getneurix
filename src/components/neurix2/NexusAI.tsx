@@ -15,6 +15,11 @@ interface NexusResponse {
   agentA: AgentResponse; agentB: AgentResponse;
   inputFindings: { type: string; clause: string; match: string }[];
   consensus: "GREEN_GREEN" | "GREEN_MAGENTA" | "MAGENTA_GREEN" | "MAGENTA_MAGENTA";
+  fortress?: {
+    scrub: { redactions: number; types: string[] };
+    selfHeal: { agent: string; attempt: number; error: string; recovered: boolean }[];
+    computeGuard: { downgraded: boolean; reason: string; costUsd: number; cap: number; modelA: string; modelB: string };
+  };
 }
 
 interface Props {
