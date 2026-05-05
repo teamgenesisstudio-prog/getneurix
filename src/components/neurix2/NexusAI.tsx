@@ -110,6 +110,25 @@ export default function NexusAI({ state, onState }: Props) {
               Safety Consensus: {resp.consensus.replace("_", " / ")}
             </span>
           </div>
+          {resp.fortress && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-[#0A0A0A] border border-[#00FFFF]/20 rounded-lg p-3">
+                <div className="font-mono text-[10px] text-[#00FFFF] uppercase tracking-wider mb-1">Pre-Flight Scrub</div>
+                <div className="text-white font-mono text-sm">{resp.fortress.scrub.redactions} redactions</div>
+                <div className="text-[10px] text-[#A0A0A0] font-mono mt-1">{resp.fortress.scrub.types.join(" · ") || "clean"}</div>
+              </div>
+              <div className="bg-[#0A0A0A] border border-[#00FFFF]/20 rounded-lg p-3">
+                <div className="font-mono text-[10px] text-[#00FFFF] uppercase tracking-wider mb-1">Self-Healing</div>
+                <div className="text-white font-mono text-sm">{resp.fortress.selfHeal.length === 0 ? "schema OK" : `${resp.fortress.selfHeal.filter(r => r.recovered).length}/${resp.fortress.selfHeal.length} recovered`}</div>
+                <div className="text-[10px] text-[#A0A0A0] font-mono mt-1">{resp.fortress.selfHeal.length === 0 ? "no repair needed" : resp.fortress.selfHeal[0].error.slice(0, 40)}</div>
+              </div>
+              <div className="bg-[#0A0A0A] border border-[#00FFFF]/20 rounded-lg p-3">
+                <div className="font-mono text-[10px] text-[#00FFFF] uppercase tracking-wider mb-1">Compute Guard</div>
+                <div className="text-white font-mono text-sm">${resp.fortress.computeGuard.costUsd.toFixed(5)} / ${resp.fortress.computeGuard.cap}</div>
+                <div className={`text-[10px] font-mono mt-1 ${resp.fortress.computeGuard.downgraded ? "text-[#FF00FF]" : "text-[#A0A0A0]"}`}>{resp.fortress.computeGuard.downgraded ? "PIVOTED → efficiency tier" : "standard tier"}</div>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {[{ label: "Intelligence Agent A", data: resp.agentA }, { label: "Intelligence Agent B", data: resp.agentB }].map((a, i) => (
               <div key={i} className="bg-[#0A0A0A] border border-white/5 rounded-lg p-4">
