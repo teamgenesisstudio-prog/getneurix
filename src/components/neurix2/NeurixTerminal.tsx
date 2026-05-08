@@ -1,19 +1,21 @@
 import { useState, useEffect } from "react";
-import { Shield, Activity, FlaskConical, Bot, ArrowLeft, Power } from "lucide-react";
+import { Shield, Activity, FlaskConical, Bot, ArrowLeft, Power, Code2 } from "lucide-react";
 import CommandCenter from "./CommandCenter";
 import Sentinel from "./Sentinel";
 import Lab from "./Lab";
 import NexusAI from "./NexusAI";
+import NeurixSDKPanel from "./NeurixSDKPanel";
 import { newSession, BUDGET_CAP, type SentinelState } from "@/lib/neurix-sentinel";
 
 interface Props { onBack: () => void; }
-type Section = "command" | "sentinel" | "lab" | "nexus";
+type Section = "command" | "sentinel" | "lab" | "nexus" | "sdk";
 
 const nav: { id: Section; label: string; icon: typeof Shield; sub: string }[] = [
   { id: "command", label: "Command Center", icon: Activity, sub: "Overview" },
   { id: "sentinel", label: "The Sentinel", icon: Shield, sub: "Firewall + Compliance" },
   { id: "lab", label: "The Lab", icon: FlaskConical, sub: "Shadow Engine" },
   { id: "nexus", label: "Nexus AI", icon: Bot, sub: "Multi-LLM Sandbox" },
+  { id: "sdk", label: "Neurix SDK", icon: Code2, sub: "Drop-in Client" },
 ];
 
 export default function NeurixTerminal({ onBack }: Props) {
@@ -86,6 +88,7 @@ export default function NeurixTerminal({ onBack }: Props) {
           {section === "sentinel" && <Sentinel state={state} />}
           {section === "lab" && <Lab />}
           {section === "nexus" && <NexusAI state={state} onState={setState} />}
+          {section === "sdk" && <NeurixSDKPanel />}
         </div>
       </main>
     </div>
