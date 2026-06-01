@@ -323,7 +323,7 @@ const HeroCard = () => {
 };
 
 const Sparkline = () => {
-  const { ref, shown } = useReveal<SVGSVGElement>();
+  const { ref, shown } = useReveal<any>();
   const points = [
     [0, 38], [25, 30], [50, 34], [75, 26], [100, 28], [125, 22], [150, 24],
     [175, 18], [200, 20], [225, 26], [250, 14], [275, 18], [300, 12], [325, 18],
