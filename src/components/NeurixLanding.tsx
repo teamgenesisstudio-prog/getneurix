@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, ReactNode } from "react";
+import { V3Section, DistillationDemo } from "./neurix-v3/V3Demos";
 
 /* ---------- fonts ---------- */
 const FontLoader = () => {
@@ -1402,6 +1403,9 @@ const NeurixLanding = ({ onEnterApp }: { onEnterApp: () => void }) => {
             <ProblemGrid />
           </section>
 
+          {/* SECTION 3.5 — V3 INTERACTIVE */}
+          <V3Section />
+
           {/* SECTION 4 — HOW IT WORKS */}
           <section id="features" style={{ padding: "120px 24px", maxWidth: 1100, margin: "0 auto" }}>
             <SectionTitle title="Simple to integrate. Serious in production." />
@@ -1552,6 +1556,20 @@ const NeurixLanding = ({ onEnterApp }: { onEnterApp: () => void }) => {
             subtitle="17 Gemini-powered features. Understand your AI at depth."
             features={v2Features}
             onBack={() => goTo("home")}
+            extra={
+              <div style={{ marginTop: 64 }}>
+                <div style={{ fontFamily: "'DM Mono', ui-monospace, monospace", fontSize: 12, color: "#3b82f6", letterSpacing: 2, marginBottom: 14 }}>
+                  INTERACTIVE
+                </div>
+                <h2 style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 32, fontWeight: 600, letterSpacing: "-0.02em", margin: 0, marginBottom: 8, color: "#f5f5f5" }}>
+                  Knowledge Distillation
+                </h2>
+                <p style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: 15, color: "#999999", margin: 0, marginBottom: 24, maxWidth: 640 }}>
+                  Compress AI knowledge without losing reliability. Run a live distillation check below.
+                </p>
+                <DistillationDemo />
+              </div>
+            }
           />
         </PageTransition>
       )}
