@@ -1016,12 +1016,14 @@ const VersionView = ({
   subtitle,
   features,
   onBack,
+  extra,
 }: {
   badge: string;
   title: string;
   subtitle: string;
   features: { t: string; d: string }[];
   onBack: () => void;
+  extra?: ReactNode;
 }) => (
   <div style={{ background: C.bg, minHeight: "100vh", color: C.text, ...sans }}>
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "80px 24px 120px" }}>
@@ -1076,6 +1078,7 @@ const VersionView = ({
           </Reveal>
         ))}
       </div>
+      {extra}
     </div>
   </div>
 );
