@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { storage, pushActivity } from "@/lib/v3/storage";
 import { callV3 } from "@/lib/v3/api";
 import { C, mono, sans, relTime, downloadJSON } from "@/lib/v3/ui";
-import { Card, SectionLabel, Btn, Badge, Input, Textarea, Sparkline } from "./primitives";
+import { Card, SectionLabel, Btn, Badge, Input, Textarea, Sparkline, Stat } from "./primitives";
 import { Plus, Play, Trash2, AlertTriangle, Loader2 } from "lucide-react";
 
 interface Test { id: string; prompt: string; expectedPattern: string; criteria: string; lastStatus?: "pass" | "fail" | "pending"; lastOutput?: string }
@@ -177,6 +177,3 @@ export default function Regression() {
     </div>
   );
 }
-
-// inline mini-stat to avoid circular import
-import { Stat } from "./primitives";
