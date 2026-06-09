@@ -19,17 +19,18 @@ export default function Dashboard({ onNav }: { onNav: (s: Sec) => void }) {
 
   const totalRequests = useMemo(() => obs.points?.reduce((a: number, p: any) => a + p.requests, 0) ?? 0, [obs]);
   const totalFailures = useMemo(() => obs.points?.reduce((a: number, p: any) => a + p.failures, 0) ?? 0, [obs]);
-  const repairSuccess = repairs.length ? Math.round((repairs.filter(r => r.result?.validationStatus === "VALID").length / repairs.length) * 100) : 96;
+  const repairSuccess = repairs.length ? Math.round((repairs.filter(r => r.result?.validationStatus === "VALID").length / repairs.length) * 100) : 0;
 
   const threats24h = firewall.filter(f => Date.now() - new Date(f.timestamp).getTime() < 86400000 && f.result?.riskLevel !== "SAFE").length;
 
   const health = useMemo(() => {
+    if (!totalRequests && !redteam.length && !firewall.length) return 100;
     const failRate = totalRequests ? (totalFailures / totalRequests) : 0;
-    const securityAvg = redteam.length ? redteam.reduce((a, r) => a + (r.result?.securityScore || 80), 0) / redteam.length : 80;
-    return Math.round(Math.max(0, Math.min(100, 100 - failRate * 200 + (securityAvg - 70) * 0.4)));
-  }, [totalRequests, totalFailures, redteam]);
+    const securityAvg = redteam.length ? redteam.reduce((a, r) => a + (r.result?.securityScore || 0), 0) / redteam.length : 100;
+    return Math.round(Math.max(0, Math.min(100, 100 - failRate * 200 - (100 - securityAvg) * 0.4)));
+  }, [totalRequests, totalFailures, redteam, firewall.length]);
 
-  // 7-day buckets from observability points (collapsed)
+  // 7-day buckets from real observability points only.
   const days = 7;
   const reqSeries = Array.from({ length: days }, (_, i) => {
     const slice = obs.points?.slice(Math.floor((i / days) * obs.points.length), Math.floor(((i + 1) / days) * obs.points.length)) ?? [];
@@ -39,7 +40,7 @@ export default function Dashboard({ onNav }: { onNav: (s: Sec) => void }) {
     const slice = obs.points?.slice(Math.floor((i / days) * obs.points.length), Math.floor(((i + 1) / days) * obs.points.length)) ?? [];
     return slice.reduce((a: number, p: any) => a + p.failures, 0);
   });
-  const repairSeries = Array.from({ length: days }, () => Math.floor(Math.random() * 40 + 30));
+  const repairSeries = Array.from({ length: days }, () => repairs.length ? Math.round(repairs.length / days) : 0);
 
   const modules: { id: Sec; label: string; icon: any; color: string; desc: string }[] = [
     { id: "firewall", label: "AI Firewall", icon: Shield, color: C.accent, desc: "Real-time prompt threat detection" },
