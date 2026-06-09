@@ -24,52 +24,11 @@ export default function Observability() {
   const [range, setRange] = useState("15m");
   const tick = useRef(0);
 
-  // live update every 3s
+  // Re-read real telemetry written by callV3 every 2s. No fabrication.
   useEffect(() => {
     const i = setInterval(() => {
-      tick.current++;
-      setData(prev => {
-        const now = Date.now();
-        const requests = rand(80, 180);
-        const failures = rand(0, Math.floor(requests * (Math.random() < 0.15 ? 0.12 : 0.05)));
-        const latency = rand(220, 1500);
-        const newPoint: Point = { ts: now, requests, failures, latencyMs: latency };
-        const points = [...prev.points, newPoint].slice(-60);
-
-        // 1-3 new log rows
-        const newLogs: LogRow[] = Array.from({ length: rand(1, 4) }, () => {
-          const isError = Math.random() < 0.18;
-          const isWarn = !isError && Math.random() < 0.18;
-          return {
-            id: crypto.randomUUID(), ts: now - rand(0, 2000),
-            request_id: "req_" + crypto.randomUUID().slice(0, 8),
-            model: MODELS[rand(0, MODELS.length)],
-            status: isError ? "error" : isWarn ? "warning" : "success",
-            latency: rand(150, 2600),
-            error_type: isError || isWarn ? ERROR_TYPES[rand(0, ERROR_TYPES.length)] : "",
-            message: MESSAGES[rand(0, MESSAGES.length)],
-          };
-        });
-        const logs = [...newLogs, ...prev.logs].slice(0, 200);
-
-        // alert rules
-        let alerts = prev.alerts;
-        const last10 = points.slice(-10);
-        const failRate = last10.reduce((a, p) => a + p.failures, 0) / Math.max(1, last10.reduce((a, p) => a + p.requests, 0));
-        if (failRate > 0.05 && !alerts.some(a => a.rule === "Failure rate >5%" && Date.now() - new Date(a.ts).getTime() < 60000)) {
-          const al = { id: crypto.randomUUID(), severity: "warn", ts: new Date().toISOString(), rule: "Failure rate >5%", value: (failRate * 100).toFixed(1) + "%" };
-          alerts = [al, ...alerts].slice(0, 20);
-          pushActivity({ module: "observability", type: "alert_raised", message: `Failure rate ${al.value}`, severity: "warn" });
-        }
-        if (latency > 2000 && !alerts.some(a => a.rule === "Latency >2000ms" && Date.now() - new Date(a.ts).getTime() < 60000)) {
-          alerts = [{ id: crypto.randomUUID(), severity: "warn", ts: new Date().toISOString(), rule: "Latency >2000ms", value: latency + "ms" }, ...alerts].slice(0, 20);
-        }
-
-        const next = { points, logs, alerts };
-        storage.set("nx_observability_data", next);
-        return next;
-      });
-    }, 3000);
+      setData(storage.get<Obs>("nx_observability_data", { points: [], logs: [], alerts: [] }));
+    }, 2000);
     return () => clearInterval(i);
   }, []);
 
