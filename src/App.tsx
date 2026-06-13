@@ -9,6 +9,7 @@ import HowItWorks from "./pages/HowItWorks.tsx";
 import Auth from "./pages/Auth.tsx";
 import Distillation from "./pages/Distillation.tsx";
 import V3 from "./pages/V3.tsx";
+import Privacy from "./pages/Privacy.tsx";
 
 const queryClient = new QueryClient();
 
