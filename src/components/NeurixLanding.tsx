@@ -1434,6 +1434,36 @@ const NeurixLanding = ({ onEnterApp }: { onEnterApp: () => void }) => {
             <Trust />
           </section>
 
+          {/* SECTION 7.5 — PRIVACY */}
+          <section id="privacy" style={{ padding: "120px 24px", maxWidth: 1200, margin: "0 auto" }}>
+            <SectionTitle eyebrow="PRIVACY & DATA" title="Your data stays yours." subtitle="Privacy isn't a feature. It's the foundation." />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginTop: 48 }}>
+              {[
+                { t: "PII Tokenization", d: "Emails, SSNs, phones, cards, JWTs replaced with tokens before any data leaves your environment." },
+                { t: "No Training on Your Data", d: "We never use your prompts, responses, or datasets to train models. Ever." },
+                { t: "90-Day Retention", d: "Scans auto-delete after 90 days. Delete anytime from your dashboard." },
+                { t: "Encrypted At Rest", d: "AES-256 at rest, TLS 1.3 in transit. Secrets isolated per-workspace." },
+                { t: "GDPR & CCPA Ready", d: "Full data export, right to deletion, and EU data residency for European customers." },
+                { t: "SOC 2 In Progress", d: "Type II audit underway. HIPAA and ISO 27001 on the roadmap for Q3." },
+              ].map((f, i) => (
+                <Reveal key={f.t} delay={Math.min(i, 6) * 60}>
+                  <Card style={{ minHeight: 150 }}>
+                    <div style={{ ...mono, fontSize: 11, color: C.blue, marginBottom: 12 }}>{String(i + 1).padStart(2, "0")}</div>
+                    <h3 style={{ ...sans, fontSize: 17, fontWeight: 600, margin: 0, marginBottom: 8 }}>{f.t}</h3>
+                    <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.55, margin: 0 }}>{f.d}</p>
+                  </Card>
+                </Reveal>
+              ))}
+            </div>
+            <Reveal delay={400}>
+              <div style={{ marginTop: 32, textAlign: "center" }}>
+                <Link to="/privacy" style={{ ...mono, fontSize: 13, color: C.blue, textDecoration: "none", borderBottom: `1px solid ${C.blue}`, paddingBottom: 2 }}>
+                  Read the full Privacy Policy →
+                </Link>
+              </div>
+            </Reveal>
+          </section>
+
           {/* SECTION 8 — FINAL CTA */}
           <section
             id="pricing"
