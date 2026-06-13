@@ -1527,11 +1527,12 @@ const NeurixLanding = ({ onEnterApp }: { onEnterApp: () => void }) => {
               <div style={{ ...sans, color: C.text, fontWeight: 700, letterSpacing: 0.5 }}>
                 NEUR<span style={{ color: C.blue }}>IX</span>
               </div>
-              <div style={{ display: "flex", gap: 24, ...sans }}>
+              <div style={{ display: "flex", gap: 24, ...sans, alignItems: "center" }}>
                 <span>Product</span>
                 <span>Docs</span>
                 <span>Blog</span>
                 <span>Twitter</span>
+                <Link to="/privacy" style={{ color: "inherit", textDecoration: "none" }}>Privacy</Link>
               </div>
               <div style={{ ...mono, fontSize: 11 }}>© 2025 Neurix. All rights reserved.</div>
             </div>
