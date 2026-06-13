@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { V3Section, DistillationDemo } from "./neurix-v3/V3Demos";
 
 /* ---------- fonts ---------- */
